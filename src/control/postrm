@@ -1,0 +1,9 @@
+#!/bin/sh
+
+/etc/init.d/manager restart &> /dev/null
+
+/usr/sbin/iptables -D INPUT -j input_lqm -m comment --comment 'block low quality links'
+/usr/sbin/iptables -F input_lqm
+/usr/sbin/iptables -X input_lqm
+
+exit 0
