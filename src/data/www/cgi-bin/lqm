@@ -101,8 +101,6 @@ html.print(string.format([[
             }
             document.getElementById("links").innerHTML = links;
         }
-        update(d);
-        setInterval(() => fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => update(data)), 1000);
         const onHighLow = () => {
             fetch("/cgi-bin/lqm-api", {
                 method: "POST",
@@ -114,6 +112,14 @@ html.print(string.format([[
         }
         high.addEventListener("change", onHighLow);
         low.addEventListener("change", onHighLow);
+        const fetchAndUpdate = () => {
+            fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => {
+                update(data);
+                setTimeout(fetchAndUpdate, 1000);
+            });
+        }
+        update(d);
+        fetchAndUpdate();
     </script>
 </body>
 </html>]], data))
