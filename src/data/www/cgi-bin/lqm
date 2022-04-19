@@ -1,0 +1,120 @@
+#!/usr/bin/lua
+--[[
+
+	Copyright (C) 2022 Tim Wilkinson
+	See Contributors file for additional contributors
+
+	This program is free software: you can redistribute it and/or modify
+	it under the terms of the GNU General Public License as published by
+	the Free Software Foundation version 3 of the License.
+
+	This program is distributed in the hope that it will be useful,
+	but WITHOUT ANY WARRANTY; without even the implied warranty of
+	MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+	GNU General Public License for more details.
+
+	You should have received a copy of the GNU General Public License
+	along with this program.  If not, see <http://www.gnu.org/licenses/>.
+
+	Additional Terms:
+
+	Additional use restrictions exist on the AREDN(TM) trademark and logo.
+		See AREDNLicense.txt for more info.
+
+	Attributions to the AREDN Project must be retained in the source code.
+	If importing this code into a new or existing project attribution
+	to the AREDN project must be added to the source code.
+
+	You must not misrepresent the origin of the material contained within.
+
+	Modified versions must be modified to attribute to the original source
+	and be marked in reasonable ways as differentiate it from the original
+	version
+
+--]]
+
+require("aredn.http")
+require("aredn.info")
+local html = require("aredn.html")
+local info = require("aredn.info")
+local json = require("luci.jsonc")
+
+local node = info.get_nvram("node")
+local data = io.popen("/www/cgi-bin/lqm-api inline"):read("*a")
+
+http_header()
+html.header(node .. " Link Quality Manager", true)
+html.print(string.format([[
+<body>
+    <style>
+        body {
+            font-size: 14px;
+            padding: 16px;
+        }
+        .title {
+            font-size: 24px;
+        }
+        .lt {
+            font-weight: bold;
+            padding: 12px 0 4px 0;
+        }
+        #links > div {
+            padding: 2px 0;
+        }
+        .m, .b {
+            display: inline-block;
+            width: 200px;
+        }
+        .s {
+            display: inline-block;
+            width: 100px;
+        }
+        #ctrl {
+            padding-top: 16px;
+        }
+        #ctrl input {
+            font-size: 14px;
+            width: 50px;
+        }
+    </style>
+    <div class="title">Link Quality Manager</div>
+    <div class="lt">
+        <span class="m">Link MAC</span><span class="s">SNR</span><span class="b">Status</span>
+    </div>
+    <div id="links"></div>
+    <div id="ctrl">
+        <span>SNR</span>
+        <span>Activate <input id="high" type="number"></span>
+        <span>Deactivate <input id="low" type="number"></span>
+    </div>
+    <script>
+        const d = %s;
+        const high = document.getElementById("high");
+        const low = document.getElementById("low");
+        high.value = d.config.high;
+        low.value = d.config.low;
+        const update = data => {
+            let links = "";
+            for (let mac in data.links) {
+                const info = data.links[mac];
+                links += `<div><span class="m">${mac}</span><span class="s">${info.snr}</span><span class="b">${info.blocked ? "blocked" : ""}</span></div>`;
+            }
+            document.getElementById("links").innerHTML = links;
+        }
+        update(d);
+        setInterval(() => fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => update(data)), 1000);
+        const onHighLow = () => {
+            fetch("/cgi-bin/lqm-api", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: `high=${high.value}&low=${low.value}`
+            });
+        }
+        high.addEventListener("change", onHighLow);
+        low.addEventListener("change", onHighLow);
+    </script>
+</body>
+</html>]], data))
+http_footer()

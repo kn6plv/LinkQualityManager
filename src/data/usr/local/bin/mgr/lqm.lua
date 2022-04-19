@@ -1,6 +1,5 @@
 --[[
 
-	Part of AREDN -- Used for creating Amateur Radio Emergency Data Networks
 	Copyright (C) 2022 Tim Wilkinson
 	See Contributors file for additional contributors
 
