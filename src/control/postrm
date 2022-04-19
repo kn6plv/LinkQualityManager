@@ -1,9 +1,14 @@
 #!/bin/sh
 
-/etc/init.d/manager restart &> /dev/null
+sed -i -e '/|8080|lqm/d' /etc/config.mesh/_setup.services.dmz
+sed -i -e '/|8080|lqm/d' /etc/config.mesh/_setup.services.nat
 
 /usr/sbin/iptables -D INPUT -j input_lqm -m comment --comment 'block low quality links'
 /usr/sbin/iptables -F input_lqm
 /usr/sbin/iptables -X input_lqm
+
+/usr/local/bin/node-setup -a -p mesh &> /dev/null
+/etc/init.d/olsrd restart &> /dev/null
+/etc/init.d/manager restart &> /dev/null
 
 exit 0

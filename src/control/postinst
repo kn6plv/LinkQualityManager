@@ -1,5 +1,20 @@
 #!/bin/sh
 
+grep "|8080|lqm" /etc/config.mesh/_setup.services.dmz &> /dev/null
+DMZPRESENT=$?
+grep "|8080|lqm" /etc/config.mesh/_setup.services.nat &> /dev/null
+NATPRESENT=$?
+
+if [ "$DMZPRESENT" != 0 ]; then
+  echo "LinkQualityMgr|1|http|$(uname -n)|8080|lqm" >> /etc/config.mesh/_setup.services.dmz
+fi
+
+if [ "$NATPRESENT" != 0 ]; then
+  echo "LinkQualityMgr|1|http|$(uname -n)|8080|lqm" >> /etc/config.mesh/_setup.services.nat
+fi
+
+/usr/local/bin/node-setup -a -p mesh &> /dev/null
+/etc/init.d/olsrd restart &> /dev/null
 /etc/init.d/manager restart &> /dev/null
 
 exit 0
