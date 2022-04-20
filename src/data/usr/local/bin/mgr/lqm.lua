@@ -45,8 +45,12 @@ end
 
 function lqm()
 
-    -- Flush filter
+    -- Create filters (cannot create during install as they disappear on reboot)
     os.execute("/usr/sbin/iptables -F input_lqm 2> /dev/null")
+    os.execute("/usr/sbin/iptables -X input_lqm 2> /dev/null")
+    os.execute("/usr/sbin/iptables -N input_lqm 2> /dev/null")
+    os.execute("/usr/sbin/iptables -D INPUT -j input_lqm -m comment --comment 'block low quality links' 2> /dev/null")
+    os.execute("/usr/sbin/iptables -I INPUT -j input_lqm -m comment --comment 'block low quality links' 2> /dev/null")
     
     local tracker = {}
     while true

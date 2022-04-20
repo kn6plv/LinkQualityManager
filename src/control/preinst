@@ -3,11 +3,4 @@
 mkdir -p /usr/local/bin/mgr
 mkdir -p /etc/local
 
-# Make sure apprpriate table exists and is empty
-/usr/sbin/iptables -F input_lqm
-/usr/sbin/iptables -X input_lqm
-/usr/sbin/iptables -N input_lqm
-/usr/sbin/iptables -D INPUT -j input_lqm -m comment --comment 'block low quality links'
-/usr/sbin/iptables -I INPUT -j input_lqm -m comment --comment 'block low quality links'
-
 exit 0
