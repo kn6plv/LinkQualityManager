@@ -71,7 +71,7 @@ html.print(string.format([[
         }
         .p {
             display: inline-block;
-            width: 140px;
+            width: 120px;
         }
         #ctrl {
             padding-top: 16px;
@@ -83,7 +83,7 @@ html.print(string.format([[
     </style>
     <div class="title">Link Quality Manager</div>
     <div class="lt">
-        <span class="m">Link MAC</span><span class="s">SNR</span><span class="p">TX Success</span><span class="b">Status</span>
+        <span class="m">Link MAC</span><span class="s">SNR</span><span class="s">Error</span><span class="p">TX</span><span class="b">Status</span>
     </div>
     <div id="links"></div>
     <div id="ctrl">
@@ -92,6 +92,7 @@ html.print(string.format([[
         <span>Activate <input id="high" type="number"></span>
     </div>
     <script>
+        const wifi_scale = 0.2;
         const d = %s;
         const high = document.getElementById("high");
         const low = document.getElementById("low");
@@ -101,8 +102,14 @@ html.print(string.format([[
             let links = "";
             for (let mac in data.links) {
                 const info = data.links[mac];
-                const tx = info.tx_packets > 0 ? Math.round(Math.max(0, 100 * (info.tx_packets - info.tx_retries - info.tx_fail) / info.tx_packets)) : 0;
-                links += `<div><span class="m">${mac}</span><span class="s">${info.signal - info.noise}</span><span class="p">${info.blocked ? "-" : tx + "%%"}</span><span class="b">${info.blocked ? "blocked" : ""}</span></div>`;
+                let txspeed = "-";
+                let txsuccess = "-";
+                if (!info.blocked && info.tx_packets > 0) {
+                    txsuccess = Math.max(0, (info.tx_packets - info.tx_retries - info.tx_fail) / info.tx_packets);
+                    txspeed = (info.tx_rate * wifi_scale * txsuccess).toFixed(2) + " Mb/s";
+                    txsuccess = (100 - Math.round(txsuccess * 100)) + "%%";
+                }
+                links += `<div><span class="m">${mac}</span><span class="s">${info.signal - info.noise}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="b">${info.blocked ? "blocked" : ""}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
         }

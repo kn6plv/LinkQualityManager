@@ -76,8 +76,12 @@ local kv = {
 	["tx packets:"] = "tx_packets",
 	["tx retries:"] = "tx_retries",
 	["tx failed:"] = "tx_fail",
+	["tx bitrate:"] = "tx_rate",
+	["tx bitrate:.+MCS"] = "tx_mcs",
 	["rx packets:"] = "rx_packets",
 	["rx drop misc:"] = "rx_drop",
+	["rx bitrate:"] = "rx_rate",
+	["rx bitrate:.+MCS"] = "rx_mcs",
 	["expected throughput:"] = "thru"
 }
 local stations = {}
