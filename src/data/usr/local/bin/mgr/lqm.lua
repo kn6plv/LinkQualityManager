@@ -69,7 +69,7 @@ function lqm()
         for mac, station in pairs(iwinfo.nl80211.assoclist(get_ifname("wifi")))
         do
             if station.signal ~= 0 then
-                local snr = station.signal + 95 -- rssi-to-snr
+                local snr = station.signal - station.noise
                 if not tracker[mac] then
                     tracker[mac] = {
                         active = true,

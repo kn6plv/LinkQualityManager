@@ -69,6 +69,10 @@ html.print(string.format([[
             display: inline-block;
             width: 100px;
         }
+        .p {
+            display: inline-block;
+            width: 140px;
+        }
         #ctrl {
             padding-top: 16px;
         }
@@ -79,13 +83,13 @@ html.print(string.format([[
     </style>
     <div class="title">Link Quality Manager</div>
     <div class="lt">
-        <span class="m">Link MAC</span><span class="s">SNR</span><span class="b">Status</span>
+        <span class="m">Link MAC</span><span class="s">SNR</span><span class="p">TX Success</span><span class="b">Status</span>
     </div>
     <div id="links"></div>
     <div id="ctrl">
         <span>SNR</span>
-        <span>Activate <input id="high" type="number"></span>
         <span>Deactivate <input id="low" type="number"></span>
+        <span>Activate <input id="high" type="number"></span>
     </div>
     <script>
         const d = %s;
@@ -97,7 +101,8 @@ html.print(string.format([[
             let links = "";
             for (let mac in data.links) {
                 const info = data.links[mac];
-                links += `<div><span class="m">${mac}</span><span class="s">${info.snr}</span><span class="b">${info.blocked ? "blocked" : ""}</span></div>`;
+                const tx = info.tx_packets > 0 ? Math.round(Math.max(0, 100 * (info.tx_packets - info.tx_retries - info.tx_fail) / info.tx_packets)) : 0;
+                links += `<div><span class="m">${mac}</span><span class="s">${info.signal - info.noise}</span><span class="p">${info.blocked ? "-" : tx + "%%"}</span><span class="b">${info.blocked ? "blocked" : ""}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
         }
