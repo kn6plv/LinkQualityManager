@@ -32,15 +32,47 @@
 
 --]]
 
+local nixio = require("nixio")
+local uci = require("uci")
 local json = require("luci.jsonc")
+local sys = require("luci.sys")
 
-function enable_mac(mac)
-    os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. mac .. " -j DROP 2> /dev/null")
+
+function update_block(track)
+    if track.blocks.dtd or track.blocks.signal or track.blocks.distance then
+        if not track.blocked then
+            track.blocked = true
+            os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+            os.execute("/usr/sbin/iptables -I input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+        end
+    else
+        if track.blocked then
+            track.blocked = false
+            os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+        end
+    end
 end
 
-function disable_mac(mac)
-    enable_mac(mac) -- remove any current entry (shouldnt happen but just in case)
-    os.execute("/usr/sbin/iptables -I input_lqm -p udp --destination-port 698 -m mac --mac-source " .. mac .. " -j DROP 2> /dev/null")
+function distance(lat1, lon1, lat2, lon2)
+    local r2 = 12742000 -- diameter earth (meters)
+    local p = 0.017453292519943295 --  Math.PI / 180
+    local v = 0.5 - math.cos((lat2 - lat1) * p) / 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2
+    return math.floor(r2 * math.asin(math.sqrt(v)))
+end
+
+-- Clear old data
+io.open("/tmp/lqm.info", "w"):close()
+
+local cursor = uci.cursor()
+
+-- Get radio
+local phyname = "phy0"
+for i = 0,2
+do
+    if cursor:get("wireless","@wifi-iface[" .. i .. "]", "network") == "wifi" then
+        phyname = "phy" .. cursor:get("wireless","@wifi-iface[" .. i .. "]", "device"):match("radio(%d+)")
+        break
+    end
 end
 
 function lqm()
@@ -59,6 +91,9 @@ function lqm()
         local config = json.parse(f:read("*a"))
         f:close()
 
+        local lat = tonumber(cursor:get("aredn", "@location[0]", "lat"))
+        local lon = tonumber(cursor:get("aredn", "@location[0]", "lon"))
+
         local arps = {}
         arptable(
             function (entry)
@@ -66,52 +101,149 @@ function lqm()
                 arps[entry["HW address"]:upper()] = entry
             end
         )
-        for mac, station in pairs(iwinfo.nl80211.assoclist(get_ifname("wifi")))
+
+        local kv = {
+            ["signal avg:"] = "signal",
+            ["last ack signal:"] = "ack_signal",
+            ["tx packets:"] = "tx_packets",
+            ["tx retries:"] = "tx_retries",
+            ["tx failed:"] = "tx_fail",
+            ["tx bitrate:"] = "tx_rate",
+            ["tx bitrate:.+MCS"] = "tx_mcs",
+            ["rx packets:"] = "rx_packets",
+            ["rx drop misc:"] = "rx_drop",
+            ["rx bitrate:"] = "rx_rate",
+            ["rx bitrate:.+MCS"] = "rx_mcs",
+            ["expected throughput:"] = "thru"
+        }
+        local stations = {}
+        local station = {}
+        for line in io.popen("iw " .. get_ifname("wifi") .. " station dump"):lines()
+        do
+            local mac = line:match("^Station ([0-9a-f:]+) ")
+            if mac then
+                station = {
+                    signal = 0,
+                    noise = -95,
+                }
+                stations[mac:upper()] = station
+            else
+                for k, v in pairs(kv)
+                do
+                    local val = line:match(k .. "%s*([%d%-]+)")
+                    if val then
+                        station[v] = tonumber(val)
+                    end
+                end
+            end
+        end
+
+        local now = os.time()
+        local timeout = 60 * 60
+
+        for mac, station in pairs(stations)
         do
             if station.signal ~= 0 then
                 local snr = station.signal - station.noise
                 if not tracker[mac] then
                     tracker[mac] = {
-                        active = true,
-                        dtd = false,
-                        snr = 0
+                        refresh = 0,
+                        mac = mac,
+                        station = nil,
+                        ip = nil,
+                        lat = nil,
+                        lon = nil,
+                        distance = nil,
+                        blocks = {
+                            dtd = false,
+                            signal = false,
+                            distance = false
+                        },
+                        blocked = false
                     }
-                    enable_mac(mac)
                 end
+                local track = tracker[mac]
 
                 -- If we have a direct dtd connection to this device, make sure we use that
                 local macdtd = false
                 local entry = arps[mac]
                 if entry then
-                    local a, b, c = entry["IP address"]:match("^(%d+%.)(%d+)(%.%d+%.%d+)$")
+                    track.ip = entry["IP address"]
+                    local a, b, c = track.ip:match("^(%d+%.)(%d+)(%.%d+%.%d+)$")
                     local dtd = arps[string.format("%s%d%s", a, tonumber(b) + 1, c)]
                     if dtd and dtd.Device:match("%.2$") then
                         macdtd = true
                     end
+                    track.hostname = (nixio.getnameinfo(track.ip) or ""):match("^(.*)%.local%.mesh$")
                 end
-                if macdtd and not tracker[mac].dtd then
-                    tracker[mac].dtd = true
-                    disable_mac(mac)
-                elseif not macdtd and tracker[mac].dtd then
-                    tracker[mac].dtd = false
-                    enable_mac(mac)
+                if macdtd and not track.dtd then
+                    track.blocks.dtd = true
+                elseif not macdtd and track.dtd then
+                    track.blocks.dtd = false
                 end
-                if not tracker[mac].dtd then
-                    if tracker[mac].active then
+                if not track.dtd then
+                    -- When unblocked link becomes too low, block
+                    if not track.blocks.signal then
                         if snr < config.low then
-                            tracker[mac].active = false
-                            disable_mac(mac)
+                            track.blocks.signal = true
                         end 
-                    elseif not tracker[mac].active then
+                    -- when blocked link becomes high again, unblock
+                    elseif track.blocks.signal then
                         if snr >= config.high then
-                            tracker[mac].active = true
-                            enable_mac(mac)
+                            track.blocks.signal = false
                         end 
                     end
                 end
-                tracker[mac].snr = snr
+
+                -- Only refesh certain attributes periodically
+                if track.refresh + timeout < now then
+                    track.refresh = now
+                    if not track.blocked and not track.lat and track.ip then
+                        local info = json.parse(sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json"))
+                        if info and tonumber(info.lat) and tonumber(info.lon) then
+                            track.lat = tonumber(info.lat)
+                            track.lon = tonumber(info.lon)
+                            if lat and lon then
+                                track.distance = distance(lat, lon, track.lat, track.lon)
+                            end
+                        end
+                    end
+                end
+
+                -- Block any nodes which are too distant
+                if track.distance and track.distance < config.max_distance then
+                    track.blocks.distance = false
+                else
+                    track.blocks.distance = true
+                end
+
+                track.station = station
+
+                update_block(track)
             end
         end
+
+        -- Find the most distant, unblocked, device
+        local distance = 0
+        for _, track in pairs(tracker)
+        do
+            if not track.blocked and track.distance and track.distance > distance then
+                distance = track.distance
+            end
+        end
+        os.execute("iw phy " .. phyname .. " set distance " .. distance)
+        os.execute("sed -i 's/wifi_distance = .*/wifi_distance = " .. distance .. "/g' /etc/config.mesh/_setup")
+
+        -- Save this for the UI
+        f = io.open("/tmp/lqm.info", "w")
+        if f then
+            f:write(json.stringify({
+                trackers = tracker,
+                distance = distance
+            }, true))
+            f:close()
+        end
+
         wait_for_ticks(60) -- 1 minute
     end
 end

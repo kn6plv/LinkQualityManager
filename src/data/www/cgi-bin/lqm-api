@@ -65,54 +65,12 @@ if params then
 	if tonumber(params.low) then
 		config.low = tonumber(params.low)
 	end
+	if tonumber(params.max_distance) then
+		config.max_distance = tonumber(params.max_distance)
+	end
 	f = io.open("/etc/local/lqm.conf", "w")
 	f:write(json.stringify(config, true))
 	f:close()
-end
-
-local kv = {
-	["signal avg:"] = "signal",
-	["last ack signal:"] = "ack_signal",
-	["tx packets:"] = "tx_packets",
-	["tx retries:"] = "tx_retries",
-	["tx failed:"] = "tx_fail",
-	["tx bitrate:"] = "tx_rate",
-	["tx bitrate:.+MCS"] = "tx_mcs",
-	["rx packets:"] = "rx_packets",
-	["rx drop misc:"] = "rx_drop",
-	["rx bitrate:"] = "rx_rate",
-	["rx bitrate:.+MCS"] = "rx_mcs",
-	["expected throughput:"] = "thru"
-}
-local stations = {}
-local station = {}
-for line in io.popen("iw " .. get_ifname("wifi") .. " station dump"):lines()
-do
-	local mac = line:match("^Station ([0-9a-f:]+) ")
-	if mac then
-		station = {
-			signal = -95,
-			noise = -95,
-			blocked = false
-		}
-		stations[mac:upper()] = station
-	else
-		for k, v in pairs(kv)
-		do
-			local val = line:match(k .. "%s*([%d%-]+)")
-			if val then
-				station[v] = tonumber(val)
-			end
-		end
-	end
-end
-
-for line in io.popen("/usr/sbin/iptables -L input_lqm"):lines()
-do
-	local mac = line:match("MAC ([0-9A-F:]+)")
-	if mac and stations[mac] then
-		stations[mac].blocked = true
-	end
 end
 
 if not (arg and arg[1] == "inline") then
@@ -120,41 +78,7 @@ if not (arg and arg[1] == "inline") then
 	print "Cache-Control: no-store\r"
 	print "\r"
 end
-print(json.stringify({
-	config = config,
-	links = stations
-}));
-
---[[
-iw wlan0 station dump
-
-Station c4:ad:34:fc:71:62 (on wlan0)
-        inactive time:  0 ms
-        rx bytes:       25199259
-        rx packets:     109963
-        tx bytes:       9733597
-        tx packets:     26872
-        tx retries:     10066
-        tx failed:      6
-        rx drop misc:   1358
-        signal:         -80 [-82, -85] dBm
-        signal avg:     -79 [-80, -84] dBm
-        tx bitrate:     13.0 MBit/s MCS 1
-        rx bitrate:     39.0 MBit/s MCS 10
-        rx duration:    0 us
-        last ack signal:14 dBm
-        expected throughput:    8.879Mbps
-        authorized:     yes
-        authenticated:  yes
-        associated:     yes
-        preamble:       long
-        WMM/WME:        yes
-        MFP:            no
-        TDLS peer:      no
-        DTIM period:    0
-        beacon interval:100
-        short slot time:yes
-        connected time: 6442 seconds
---]]
-
-
+if nixio.fs.stat("/tmp/lqm.info") then
+	print('{"info":' .. io.open("/tmp/lqm.info", "r"):read("*a") .. ",")
+	print('"config":' .. io.open("/etc/local/lqm.conf", "r"):read("*a") .. "}")
+end
