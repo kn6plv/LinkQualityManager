@@ -218,6 +218,11 @@ function lqm()
                 track.pending = false
             end
 
+            -- Clear signal when we've not seen the node
+            if track.lastseen < now then
+                track.station.signal = track.station.noise
+            end
+
             -- Only refesh certain attributes periodically
             if track.refresh < now then
                 if not track.pending then
