@@ -88,11 +88,11 @@ html.print(string.format([[
     <div id="links"></div>
     <div id="ctrl">
         <span>SNR</span>
-        <span>Deactivate <input id="low" type="number"></span>
-        <span>Activate <input id="high" type="number"></span>
+        <span>Deactivate <input id="low" type="number" min="0" max="95"></span>
+        <span>Activate <input id="high" type="number" min="0" max="95"></span>
     </div>
     <div id="ctrl">
-        <span>Maximum distance <input id="max_distance" type="number" style="width:75px"> miles</span>
+        <span>Maximum distance <input id="max_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
     </div>
     <script>
         const meters_to_miles = 0.000621371;
@@ -103,7 +103,7 @@ html.print(string.format([[
         const max_distance = document.getElementById("max_distance");
         high.value = d.config.high;
         low.value = d.config.low;
-        max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(3);
+        max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(2);
         const status = track => {
             if (track.blocked) {
                 if (track.blocks.dtd) {

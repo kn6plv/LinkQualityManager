@@ -36,9 +36,11 @@ local nixio = require("nixio")
 local uci = require("uci")
 local json = require("luci.jsonc")
 local sys = require("luci.sys")
+local ip = require("luci.ip")
 
 local refresh_timeout = 60 * 60 -- refresh high cost data evey hour
 local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before banning
+local lastseen_timeout = 6 * 60 * 60 -- age out nodes we've not seen in 6 hours
 
 
 function update_block(track)
@@ -58,7 +60,7 @@ function update_block(track)
     end
 end
 
-function distance(lat1, lon1, lat2, lon2)
+function calcDistance(lat1, lon1, lat2, lon2)
     local r2 = 12742000 -- diameter earth (meters)
     local p = 0.017453292519943295 --  Math.PI / 180
     local v = 0.5 - math.cos((lat2 - lat1) * p) / 2 + math.cos(lat1 * p) * math.cos(lat2 * p) * (1 - math.cos((lon2 - lon1) * p)) / 2
@@ -90,6 +92,7 @@ function lqm()
     os.execute("/usr/sbin/iptables -I INPUT -j input_lqm -m comment --comment 'block low quality links' 2> /dev/null")
     
     local tracker = {}
+    local last_distance = -1
     while true
     do
         local f = io.open("/etc/local/lqm.conf")
@@ -201,65 +204,77 @@ function lqm()
                     end
                 end
 
-                -- Release pending nodes after the wait time
-                if now > track.firstseen + wait_timeout then
-                    track.pending = false
-                end
+                track.lastseen = now
+                track.station = station
+            end
+        end
 
-                -- Only refesh certain attributes periodically
-                if track.refresh < now then
-                    if not track.pending then
-                        track.refresh = now + refresh_timeout
-                    end
-                    if not track.blocked and not track.lat and track.ip then
-                        local info = json.parse(sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json"))
-                        if info and tonumber(info.lat) and tonumber(info.lon) then
-                            track.lat = tonumber(info.lat)
-                            track.lon = tonumber(info.lon)
-                            if lat and lon then
-                                track.distance = distance(lat, lon, track.lat, track.lon)
-                            end
+        local distance = 0
+
+        for _, track in pairs(tracker)
+        do
+            -- Release pending nodes after the wait time
+            if now > track.firstseen + wait_timeout then
+                track.pending = false
+            end
+
+            -- Only refesh certain attributes periodically
+            if track.refresh < now then
+                if not track.pending then
+                    track.refresh = now + refresh_timeout
+                end
+                if not track.blocked and not track.lat and track.ip then
+                    local info = json.parse(sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json"))
+                    if info and tonumber(info.lat) and tonumber(info.lon) then
+                        track.lat = tonumber(info.lat)
+                        track.lon = tonumber(info.lon)
+                        if lat and lon then
+                            track.distance = calcDistance(lat, lon, track.lat, track.lon)
                         end
                     end
                 end
-
-                -- Block any nodes which are too distant
-                if track.distance and track.distance < config.max_distance then
-                    track.blocks.distance = false
-                else
-                    track.blocks.distance = true
-                end
-
-                track.lastseen = now
-                track.station = station
-
-                update_block(track)
             end
-        end
 
-        -- Find the most distant, unblocked, device
-        local distance = 0
-        for _, track in pairs(tracker)
-        do
-            if not track.pending and not track.blocked and track.distance and track.distance > distance then
-                distance = track.distance
-            end
-        end
-        os.execute("iw phy " .. phyname .. " set distance " .. distance)
-
-        -- Update the global _setup when it changes
-        local wifi_distance = "wifi_distance = " .. distance
-        local lines = {}
-        for line in io.lines("/etc/config.mesh/_setup")
-        do
-            if line:match("^wifi_distance = ") and line ~= wifi_distance then
-                lines[#lines + 1] = wifi_distance
-                wifi_distance = nil
+            -- Block any nodes which are too distant
+            if track.distance and track.distance < config.max_distance then
+                track.blocks.distance = false
             else
-                lines[#lines + 1] = line
+                track.blocks.distance = true
+            end
+
+            update_block(track)
+
+             -- Find the most distant, unblocked, routable, node
+            if not track.pending and not track.blocked and track.distance and track.distance > distance then
+                -- Only include links we're actually using in our distance calculation
+                local rt = ip.route(track.ip)
+                if rt and tostring(rt.gw) == track.ip then
+                    distance = track.distance
+                end
+            end
+
+            -- Remove any trackers which are too old
+            if now > track.lastseen + lastseen_timeout then
+                track.blocked = true;
+                track.blocks = {}
+                update_block(track)
+                tracker[mac] = nil
             end
         end
-        if not wifi_distance then
+
+        if distance ~= last_distance then
+            -- Update the wifi distance for better bandwidth utilization
+            os.execute("iw phy " .. phyname .. " set distance " .. (distance > 0 and distance or "auto"))
+            -- Update the global _setup
+            local lines = {}
+            for line in io.lines("/etc/config.mesh/_setup")
+            do
+                if line:match("^wifi_distance = ") then
+                    lines[#lines + 1] = "wifi_distance = " .. distance
+                else
+                    lines[#lines + 1] = line
+                end
+            end
             local f = io.open("/etc/config.mesh/_setup", "w")
             if f then
                 for _, line in ipairs(lines)
@@ -268,6 +283,7 @@ function lqm()
                 end
                 f:close()
             end
+            last_distance = distance
         end
 
         -- Save this for the UI
