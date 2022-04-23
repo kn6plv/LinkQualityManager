@@ -73,11 +73,11 @@ io.open("/tmp/lqm.info", "w"):close()
 local cursor = uci.cursor()
 
 -- Get radio
-local phyname = "phy0"
+local radioname = "radio0"
 for i = 0,2
 do
     if cursor:get("wireless","@wifi-iface[" .. i .. "]", "network") == "wifi" then
-        phyname = "phy" .. cursor:get("wireless","@wifi-iface[" .. i .. "]", "device"):match("radio(%d+)")
+        radioname = cursor:get("wireless","@wifi-iface[" .. i .. "]", "device")
         break
     end
 end
@@ -272,8 +272,15 @@ function lqm()
         end
 
         if distance ~= last_distance then
+            last_distance = distance
+            distance = distance + 1
+
             -- Update the wifi distance for better bandwidth utilization
-            os.execute("iw phy " .. phyname .. " set distance " .. (distance >= 0 and distance or "auto"))
+            os.execute("iw phy phy" .. radioname:match("radio(%d+)") .. " set distance " .. (distance > 0 and distance or "auto"))
+
+            cursor:set("wireless", radioname, "distance", distance)
+            cursor:commit("wireless")
+
             -- Update the global _setup
             local lines = {}
             for line in io.lines("/etc/config.mesh/_setup")
@@ -292,7 +299,6 @@ function lqm()
                 end
                 f:close()
             end
-            last_distance = distance
         end
 
         -- Save this for the UI
