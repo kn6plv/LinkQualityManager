@@ -209,7 +209,7 @@ function lqm()
             end
         end
 
-        local distance = 0
+        local distance = -1
 
         for _, track in pairs(tracker)
         do
@@ -273,7 +273,7 @@ function lqm()
 
         if distance ~= last_distance then
             -- Update the wifi distance for better bandwidth utilization
-            os.execute("iw phy " .. phyname .. " set distance " .. (distance > 0 and distance or "auto"))
+            os.execute("iw phy " .. phyname .. " set distance " .. (distance >= 0 and distance or "auto"))
             -- Update the global _setup
             local lines = {}
             for line in io.lines("/etc/config.mesh/_setup")
