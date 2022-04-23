@@ -162,6 +162,8 @@ html.print(string.format([[
             fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => {
                 update(data);
                 setTimeout(fetchAndUpdate, 60000);
+            }).catch(_ => {
+                setTimeout(fetchAndUpdate, 30000);
             });
         }
         update(d);
