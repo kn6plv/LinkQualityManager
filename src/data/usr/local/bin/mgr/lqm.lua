@@ -246,7 +246,29 @@ function lqm()
             end
         end
         os.execute("iw phy " .. phyname .. " set distance " .. distance)
-        os.execute("sed -i 's/wifi_distance = .*/wifi_distance = " .. distance .. "/g' /etc/config.mesh/_setup")
+
+        -- Update the global _setup when it changes
+        local wifi_distance = "wifi_distance = " .. distance
+        local lines = {}
+        for line in io.lines("/etc/config.mesh/_setup")
+        do
+            if line:match("^wifi_distance = ") and line ~= wifi_distance then
+                lines[#lines + 1] = wifi_distance
+                wifi_distance = nil
+            else
+                lines[#lines + 1] = line
+            end
+        end
+        if not wifi_distance then
+            local f = io.open("/etc/config.mesh/_setup", "w")
+            if f then
+                for _, line in ipairs(lines)
+                do
+                    f:write(line .. "\n")
+                end
+                f:close()
+            end
+        end
 
         -- Save this for the UI
         f = io.open("/tmp/lqm.info", "w")
