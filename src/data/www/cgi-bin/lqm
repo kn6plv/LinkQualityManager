@@ -120,6 +120,9 @@ html.print(string.format([[
             if (track.pending) {
                 return "pending";
             }
+            if (track.routable) {
+                return "active";
+            }
             return "";
         }
         const update = data => {

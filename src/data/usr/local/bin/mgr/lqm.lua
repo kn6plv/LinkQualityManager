@@ -235,6 +235,14 @@ function lqm()
                 end
             end
 
+            -- Routable
+            local rt = ip.route(track.ip)
+            if rt and tostring(rt.gw) == track.ip then
+                track.routable = true
+            else
+                track.routable = false
+            end
+
             -- Block any nodes which are too distant
             if track.distance and track.distance < config.max_distance then
                 track.blocks.distance = false
@@ -245,12 +253,8 @@ function lqm()
             update_block(track)
 
              -- Find the most distant, unblocked, routable, node
-            if not track.pending and not track.blocked and track.distance and track.distance > distance then
-                -- Only include links we're actually using in our distance calculation
-                local rt = ip.route(track.ip)
-                if rt and tostring(rt.gw) == track.ip then
-                    distance = track.distance
-                end
+            if not track.pending and not track.blocked and track.routable and track.distance and track.distance > distance then
+                distance = track.distance
             end
 
             -- Remove any trackers which are too old
