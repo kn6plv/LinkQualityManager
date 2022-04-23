@@ -115,7 +115,10 @@ html.print(string.format([[
                 if (track.blocks.distance) {
                     return "blocked - too distant";
                 }
-                return "blocked"
+                return "blocked";
+            }
+            if (track.pending) {
+                return "pending";
             }
             return "";
         }

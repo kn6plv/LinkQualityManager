@@ -42,7 +42,7 @@ local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before ba
 
 
 function update_block(track)
-    if os.time() > track.firstseen + wait_timeout then
+    if not track.pending then
         if track.blocks.dtd or track.blocks.signal or track.blocks.distance then
             if not track.blocked then
                 track.blocked = true
@@ -164,7 +164,8 @@ function lqm()
                             signal = false,
                             distance = false
                         },
-                        blocked = false
+                        blocked = false,
+                        pending = true
                     }
                 end
                 local track = tracker[mac]
@@ -200,9 +201,14 @@ function lqm()
                     end
                 end
 
+                -- Release pending nodes after the wait time
+                if now > track.firstseen + wait_timeout then
+                    track.pending = false
+                end
+
                 -- Only refesh certain attributes periodically
                 if track.refresh < now then
-                    if track.firstseen + wait_timeout < now then
+                    if not track.pending then
                         track.refresh = now + refresh_timeout
                     end
                     if not track.blocked and not track.lat and track.ip then
@@ -235,7 +241,7 @@ function lqm()
         local distance = 0
         for _, track in pairs(tracker)
         do
-            if not track.blocked and track.distance and track.distance > distance and now > track.firstseen + wait_timeout then
+            if not track.pending and not track.blocked and track.distance and track.distance > distance then
                 distance = track.distance
             end
         end
