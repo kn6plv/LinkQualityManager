@@ -40,7 +40,7 @@ local ip = require("luci.ip")
 
 local refresh_timeout = 60 * 60 -- refresh high cost data evey hour
 local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before banning
-local lastseen_timeout = 6 * 60 * 60 -- age out nodes we've not seen in 6 hours
+local lastseen_timeout = 60 * 60 -- age out nodes we've not seen in an hour
 
 
 function update_block(track)
