@@ -235,7 +235,7 @@ function lqm()
         local distance = 0
         for _, track in pairs(tracker)
         do
-            if not track.blocked and track.distance and track.distance > distance then
+            if not track.blocked and track.distance and track.distance > distance and now > track.firstseen + wait_timeout then
                 distance = track.distance
             end
         end
