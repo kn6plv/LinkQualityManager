@@ -130,7 +130,7 @@ html.print(string.format([[
                     txspeed = (track.station.tx_rate * wifi_scale * txsuccess).toFixed(2) + " Mb/s";
                     txsuccess = (100 - Math.round(txsuccess * 100)) + "%%";
                 }
-                links += `<div><span class="m">${track.hostname || track.ip}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${track.distance ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="b">${status(track)}</span></div>`;
+                links += `<div><span class="m">${track.hostname || track.ip || track.mac}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${track.distance ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="b">${status(track)}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
         }

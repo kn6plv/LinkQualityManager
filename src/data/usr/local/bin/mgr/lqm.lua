@@ -37,18 +37,23 @@ local uci = require("uci")
 local json = require("luci.jsonc")
 local sys = require("luci.sys")
 
+local refresh_timeout = 60 * 60 -- refresh high cost data evey hour
+local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before banning
+
 
 function update_block(track)
-    if track.blocks.dtd or track.blocks.signal or track.blocks.distance then
-        if not track.blocked then
-            track.blocked = true
-            os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
-            os.execute("/usr/sbin/iptables -I input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
-        end
-    else
-        if track.blocked then
-            track.blocked = false
-            os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+    if os.time() > track.firstseen + wait_timeout then
+        if track.blocks.dtd or track.blocks.signal or track.blocks.distance then
+            if not track.blocked then
+                track.blocked = true
+                os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+                os.execute("/usr/sbin/iptables -I input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+            end
+        else
+            if track.blocked then
+                track.blocked = false
+                os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+            end
         end
     end
 end
@@ -139,7 +144,6 @@ function lqm()
         end
 
         local now = os.time()
-        local timeout = 60 * 60
 
         for mac, station in pairs(stations)
         do
@@ -147,6 +151,7 @@ function lqm()
                 local snr = station.signal - station.noise
                 if not tracker[mac] then
                     tracker[mac] = {
+                        firstseen = now,
                         refresh = 0,
                         mac = mac,
                         station = nil,
@@ -196,8 +201,10 @@ function lqm()
                 end
 
                 -- Only refesh certain attributes periodically
-                if track.refresh + timeout < now then
-                    track.refresh = now
+                if track.refresh < now then
+                    if track.firstseen + wait_timeout < now then
+                        track.refresh = now + refresh_timeout
+                    end
                     if not track.blocked and not track.lat and track.ip then
                         local info = json.parse(sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json"))
                         if info and tonumber(info.lat) and tonumber(info.lon) then
@@ -217,6 +224,7 @@ function lqm()
                     track.blocks.distance = true
                 end
 
+                track.lastseen = now
                 track.station = station
 
                 update_block(track)
