@@ -241,7 +241,7 @@ function lqm()
             end
 
             -- Routable
-            local rt = ip.route(track.ip)
+            local rt = track.ip and ip.route(track.ip) or nil
             if rt and tostring(rt.gw) == track.ip then
                 track.routable = true
             else
