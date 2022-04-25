@@ -76,6 +76,10 @@ html.print(string.format([[
             display: inline-block;
             width: 120px;
         }
+        .x {
+            display: inline-block;
+            width: 75px;
+        }
         input {
             font-size: 14px;
             width: 40px;
@@ -83,7 +87,7 @@ html.print(string.format([[
     </style>
     <div class="title">Link Quality Manager</div>
     <div class="lt">
-        <span class="m">Link</span><span class="s">SNR</span><span class="p">Distance</span><span class="s">Error</span><span class="p">TX</span><span class="b">Status</span>
+        <span class="m">Link</span><span class="s">SNR</span><span class="p">Distance</span><span class="s">Error</span><span class="p">TX</span><span class="x">Block</span><span class="b">Status</span>
     </div>
     <div id="links"></div>
     <div id="ctrl">
@@ -99,7 +103,7 @@ html.print(string.format([[
     <script>
         const meters_to_miles = 0.000621371;
         const wifi_scale = 0.2;
-        const d = %s;
+        let d = %s;
         const high = document.getElementById("high");
         const low = document.getElementById("low");
         const min_distance = document.getElementById("min_distance");
@@ -110,6 +114,9 @@ html.print(string.format([[
         max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(2);
         const status = track => {
             if (track.blocked) {
+                if (track.blocks.user) {
+                    return "blocked - user";
+                }
                 if (track.blocks.dtd) {
                     return "blocked - dtd";
                 }
@@ -135,7 +142,29 @@ html.print(string.format([[
             }
             return track.mac || "-";
         }
+        const onChange = () => {
+            const trackers = Object.values(d.info.trackers);
+            const c = document.querySelectorAll(".x input");
+            for (let i = 0; i < c.length; i++) {
+                const mac = trackers[i].mac;
+                const idx = d.config.user_blocks.indexOf(mac);
+                if (c[i].checked &&  idx === -1) {
+                    d.config.user_blocks.push(mac)
+                }
+                else if (!c[i].checked && idx !== -1) {
+                    d.config.user_blocks.splice(idx, 1);
+                }
+            }
+            fetch("/cgi-bin/lqm-api", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/x-www-form-urlencoded"
+                },
+                body: `high=${high.value}&low=${low.value}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${d.config.user_blocks.join(",")}`
+            });
+        }
         const update = data => {
+            d = data;
             let links = "";
             for (let mac in data.info.trackers) {
                 const track = data.info.trackers[mac];
@@ -146,19 +175,15 @@ html.print(string.format([[
                     txspeed = (track.station.tx_rate * wifi_scale * txsuccess).toFixed(2) + " Mb/s";
                     txsuccess = (100 - Math.round(txsuccess * 100)) + "%%";
                 }
-                links += `<div><span class="m">${name(track)}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="b">${status(track)}</span></div>`;
+                links += `<div><span class="m">${name(track)}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="x"><input type="checkbox" ${track.blocks.user ? "checked" : ""}></span><span class="b">${status(track)}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
+            const c = document.querySelectorAll(".x input");
+            for (let i = 0; i < c.length; i++) {
+                c[i].addEventListener("change", onChange);
+            }
         }
-        const onChange = () => {
-            fetch("/cgi-bin/lqm-api", {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/x-www-form-urlencoded"
-                },
-                body: `high=${high.value}&low=${low.value}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}`
-            });
-        }
+        
         high.addEventListener("change", onChange);
         low.addEventListener("change", onChange);
         min_distance.addEventListener("change", onChange);

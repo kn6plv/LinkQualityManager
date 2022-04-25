@@ -45,7 +45,7 @@ local lastseen_timeout = 60 * 60 -- age out nodes we've not seen in an hour
 
 function update_block(track)
     if not track.pending then
-        if track.blocks.dtd or track.blocks.signal or track.blocks.distance then
+        if track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user then
             if not track.blocked then
                 track.blocked = true
                 os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
@@ -253,6 +253,16 @@ function lqm()
                 track.blocks.distance = false
             else
                 track.blocks.distance = true
+            end
+
+            -- Block is user requested it
+            track.blocks.user = false
+            for _, val in ipairs(config.user_blocks)
+            do
+                if val == track.mac then
+                    track.blocks.user = true
+                    break
+                end
             end
 
             update_block(track)
