@@ -249,7 +249,7 @@ function lqm()
             end
 
             -- Block any nodes which are too distant
-            if track.distance and track.distance < config.max_distance then
+            if track.distance and track.distance >= config.min_distance and track.distance < config.max_distance then
                 track.blocks.distance = false
             else
                 track.blocks.distance = true

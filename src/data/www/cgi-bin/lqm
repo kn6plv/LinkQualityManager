@@ -92,7 +92,9 @@ html.print(string.format([[
         <span>Activate <input id="high" type="number" min="0" max="95"></span>
     </div>
     <div id="ctrl">
-        <span>Maximum distance <input id="max_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
+        <span>Distance </span>
+        <span>Minimum <input id="min_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
+        <span>Maximum <input id="max_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
     </div>
     <script>
         const meters_to_miles = 0.000621371;
@@ -100,9 +102,11 @@ html.print(string.format([[
         const d = %s;
         const high = document.getElementById("high");
         const low = document.getElementById("low");
+        const min_distance = document.getElementById("min_distance");
         const max_distance = document.getElementById("max_distance");
         high.value = d.config.high;
         low.value = d.config.low;
+        min_distance.value = (d.config.min_distance * meters_to_miles).toFixed(2);
         max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(2);
         const status = track => {
             if (track.blocked) {
@@ -152,11 +156,12 @@ html.print(string.format([[
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: `high=${high.value}&low=${low.value}&max_distance=${Math.round(max_distance.value / meters_to_miles)}`
+                body: `high=${high.value}&low=${low.value}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}`
             });
         }
         high.addEventListener("change", onChange);
         low.addEventListener("change", onChange);
+        min_distance.addEventListener("change", onChange);
         max_distance.addEventListener("change", onChange);
         const fetchAndUpdate = () => {
             fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => {

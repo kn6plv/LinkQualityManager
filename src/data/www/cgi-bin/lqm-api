@@ -65,6 +65,9 @@ if params then
 	if tonumber(params.low) then
 		config.low = tonumber(params.low)
 	end
+	if tonumber(params.min_distance) then
+		config.min_distance = tonumber(params.min_distance)
+	end
 	if tonumber(params.max_distance) then
 		config.max_distance = tonumber(params.max_distance)
 	end
