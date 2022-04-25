@@ -93,7 +93,7 @@ html.print(string.format([[
     </div>
     <div id="ctrl">
         <span>Distance </span>
-        <span>Minimum <input id="min_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
+        <span>Minimum <input id="min_distance" type="number" min="0" max="71.30" style="width:65px"></span>
         <span>Maximum <input id="max_distance" type="number" min="0" max="71.30" style="width:65px"> miles</span>
     </div>
     <script>
