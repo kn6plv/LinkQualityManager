@@ -59,8 +59,8 @@ local config = json.parse(f:read("*a"))
 f:close()
 
 if params then
-	if tonumber(params.high) then
-		config.high = tonumber(params.high)
+	if tonumber(params.margin) then
+		config.margin = tonumber(params.margin)
 	end
 	if tonumber(params.low) then
 		config.low = tonumber(params.low)

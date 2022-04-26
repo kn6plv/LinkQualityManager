@@ -196,9 +196,9 @@ function lqm()
                         if snr < config.low then
                             track.blocks.signal = true
                         end 
-                    -- when blocked link becomes high again, unblock
+                    -- when blocked link becomes (low+margin) again, unblock
                     elseif track.blocks.signal then
-                        if snr >= config.high then
+                        if snr >= config.low + config.margin then
                             track.blocks.signal = false
                         end 
                     end

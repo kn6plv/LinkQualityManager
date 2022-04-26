@@ -92,8 +92,8 @@ html.print(string.format([[
     <div id="links"></div>
     <div id="ctrl">
         <span>SNR</span>
-        <span>Deactivate <input id="low" type="number" min="0" max="95"></span>
-        <span>Activate <input id="high" type="number" min="0" max="95"></span>
+        <span>Minimum <input id="low" type="number" min="0" max="95"></span>
+        <span>Margin <input id="margin" type="number" min="0" max="95"></span>
     </div>
     <div id="ctrl">
         <span>Distance </span>
@@ -104,11 +104,11 @@ html.print(string.format([[
         const meters_to_miles = 0.000621371;
         const wifi_scale = 0.2;
         let d = %s;
-        const high = document.getElementById("high");
+        const margin = document.getElementById("margin");
         const low = document.getElementById("low");
         const min_distance = document.getElementById("min_distance");
         const max_distance = document.getElementById("max_distance");
-        high.value = d.config.high;
+        margin.value = d.config.margin;
         low.value = d.config.low;
         min_distance.value = (d.config.min_distance * meters_to_miles).toFixed(2);
         max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(2);
@@ -160,7 +160,7 @@ html.print(string.format([[
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: `high=${high.value}&low=${low.value}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${d.config.user_blocks.join(",")}`
+                body: `margin=${Math.max(0, margin.value)}&low=${Math.max(0, low.value)}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${d.config.user_blocks.join(",")}`
             });
         }
         const update = data => {
@@ -184,7 +184,7 @@ html.print(string.format([[
             }
         }
         
-        high.addEventListener("change", onChange);
+        margin.addEventListener("change", onChange);
         low.addEventListener("change", onChange);
         min_distance.addEventListener("change", onChange);
         max_distance.addEventListener("change", onChange);
