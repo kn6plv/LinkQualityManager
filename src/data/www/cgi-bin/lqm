@@ -143,16 +143,17 @@ html.print(string.format([[
             return track.mac || "-";
         }
         const onChange = () => {
+            const user_blocks = d.config.user_blocks.length ? d.config.user_blocks.split(",") : [];
             const trackers = Object.values(d.info.trackers);
             const c = document.querySelectorAll(".x input");
             for (let i = 0; i < c.length; i++) {
                 const mac = trackers[i].mac;
-                const idx = d.config.user_blocks.indexOf(mac);
+                const idx = user_blocks.indexOf(mac);
                 if (c[i].checked &&  idx === -1) {
-                    d.config.user_blocks.push(mac)
+                    user_blocks.push(mac)
                 }
                 else if (!c[i].checked && idx !== -1) {
-                    d.config.user_blocks.splice(idx, 1);
+                    user_blocks.splice(idx, 1);
                 }
             }
             fetch("/cgi-bin/lqm-api", {
@@ -160,12 +161,13 @@ html.print(string.format([[
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: `margin=${Math.max(0, margin.value)}&low=${Math.max(0, low.value)}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${d.config.user_blocks.join(",")}`
+                body: `margin=${Math.max(0, margin.value)}&low=${Math.max(0, low.value)}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${user_blocks.join(",")}`
             });
         }
         const update = data => {
             d = data;
             let links = "";
+            const user_blocks = d.config.user_blocks.length ? d.config.user_blocks.split(",") : [];
             for (let mac in data.info.trackers) {
                 const track = data.info.trackers[mac];
                 let txspeed = "-";
@@ -175,7 +177,7 @@ html.print(string.format([[
                     txspeed = (track.station.tx_rate * wifi_scale * txsuccess).toFixed(2) + " Mb/s";
                     txsuccess = (100 - Math.round(txsuccess * 100)) + "%%";
                 }
-                links += `<div><span class="m">${name(track)}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="x"><input type="checkbox" ${track.blocks.user ? "checked" : ""}></span><span class="b">${status(track)}</span></div>`;
+                links += `<div><span class="m">${name(track)}</span><span class="s">${track.station.signal - track.station.noise}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="x"><input type="checkbox" ${user_blocks.indexOf(track.mac) !== -1 ? "checked" : ""}></span><span class="b">${status(track)}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
             const c = document.querySelectorAll(".x input");

@@ -257,7 +257,7 @@ function lqm()
 
             -- Block is user requested it
             track.blocks.user = false
-            for _, val in ipairs(config.user_blocks)
+            for val in string.gmatch(config.user_blocks, "([^,]+)")
             do
                 if val == track.mac then
                     track.blocks.user = true

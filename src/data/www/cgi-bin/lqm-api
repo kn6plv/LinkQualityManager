@@ -72,11 +72,7 @@ if params then
 		config.max_distance = tonumber(params.max_distance)
 	end
 	if params.user_blocks then
-		config.user_blocks = {}
-        for mac in string.gmatch(params.user_blocks, "([^,]+)")
-		do
-			config.user_blocks[#config.user_blocks + 1] = mac
-        end
+		config.user_blocks = params.user_blocks
 	end
 	f = io.open("/etc/local/lqm.conf", "w")
 	f:write(json.stringify(config, true))
