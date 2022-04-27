@@ -121,10 +121,10 @@ html.print(string.format([[
                     return "blocked - dtd";
                 }
                 if (track.blocks.signal) {
-                    return "blocked - low signal";
+                    return "blocked - signal";
                 }
                 if (track.blocks.distance) {
-                    return "blocked - too distant";
+                    return "blocked - distance";
                 }
                 return "blocked";
             }
