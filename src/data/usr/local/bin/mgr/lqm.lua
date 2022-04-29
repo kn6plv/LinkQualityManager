@@ -281,12 +281,13 @@ function lqm()
             end
         end
 
-        if distance ~= last_distance then
-            last_distance = distance
-            distance = distance + 1
+        last_distance = distance
+        distance = distance + 1
 
-            -- Update the wifi distance for better bandwidth utilization
-            os.execute("iw phy phy" .. radioname:match("radio(%d+)") .. " set distance " .. (distance > 0 and distance or "auto"))
+        -- Update the wifi distance
+        os.execute("iw phy phy" .. radioname:match("radio(%d+)") .. " set distance " .. (distance > 0 and distance or "auto"))
+
+        if distance ~= last_distance then
 
             cursor:set("wireless", radioname, "distance", distance)
             cursor:commit("wireless")
