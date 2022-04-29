@@ -277,16 +277,21 @@ function lqm()
                 track.blocked = true;
                 track.blocks = {}
                 update_block(track)
-                tracker[mac] = nil
+                tracker[track.mac] = nil
             end
         end
 
         distance = distance + 1
 
         -- Update the wifi distance
-        os.execute("iw phy phy" .. radioname:match("radio(%d+)") .. " set distance " .. (distance > 0 and distance or "auto"))
+        if distance > 0 then
+            local time_us = distance * 0.0033 -- usecs airtime
+            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set coverage " .. math.floor(time_us / 3))
+        else
+            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set distance auto")
+        end
 
-        if distance ~= last_distance then
+        --[[if distance ~= last_distance then
             last_distance = distance
 
             cursor:set("wireless", radioname, "distance", distance)
@@ -310,7 +315,7 @@ function lqm()
                 end
                 f:close()
             end
-        end
+        end--]]
 
         -- Save this for the UI
         f = io.open("/tmp/lqm.info", "w")
