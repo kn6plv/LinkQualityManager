@@ -210,6 +210,7 @@ function lqm()
         end
 
         local distance = -1
+        local coverage = -1
 
         for _, track in pairs(tracker)
         do
@@ -285,8 +286,8 @@ function lqm()
 
         -- Update the wifi distance
         if distance > 0 then
-            local time_us = distance * 0.0033 -- usecs airtime
-            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set coverage " .. math.floor(time_us / 3))
+            coverage = math.floor((distance * 2 * 0.0033) / 3) -- airtime
+            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set coverage " .. coverage)
         else
             os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set distance auto")
         end
@@ -322,7 +323,8 @@ function lqm()
         if f then
             f:write(json.stringify({
                 trackers = tracker,
-                distance = distance
+                distance = distance,
+                coverate = coverage
             }, true))
             f:close()
         end
