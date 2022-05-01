@@ -208,7 +208,10 @@ function lqm()
                 end
 
                 track.snr = snr
-                track.avg_snr = (snr + (track.rev_snr or snr)) / 2
+                if station.ack_signal then
+                    track.rev_snr = snr
+                end
+
                 track.lastseen = now
                 track.station = station
             end
@@ -264,7 +267,6 @@ function lqm()
                                     end
                                     if myhostname == hostname then
                                         track.rev_snr = snr
-                                        track.avg_snr = (track.snr + snr) / 2
                                     end
                                 end
                             end
@@ -272,6 +274,9 @@ function lqm()
                     end
                 end
             end
+
+            -- Update avg snr using both ends (if we have them)
+            track.avg_snr = (track.snr + (track.rev_snr or track.snr)) / 2
 
             -- Routable
             local rt = track.ip and ip.route(track.ip) or nil
