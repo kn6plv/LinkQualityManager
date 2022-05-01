@@ -235,35 +235,37 @@ function lqm()
                 if not track.pending then
                     track.refresh = now + refresh_timeout
                 end
-                local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1"))
-                if info then
-                    track.distance = nil
-                    if tonumber(info.lat) and tonumber(info.lon) then
-                        track.lat = tonumber(info.lat)
-                        track.lon = tonumber(info.lon)
-                        if lat and lon then
-                            track.distance = calcDistance(lat, lon, track.lat, track.lon)
+                if track.ip then
+                    local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1"))
+                    if info then
+                        track.distance = nil
+                        if tonumber(info.lat) and tonumber(info.lon) then
+                            track.lat = tonumber(info.lat)
+                            track.lon = tonumber(info.lon)
+                            if lat and lon then
+                                track.distance = calcDistance(lat, lon, track.lat, track.lon)
+                            end
                         end
-                    end
-                    track.links = {}
-                    track.rev_snr = nil
-                    for ip, link in pairs(info.link_info)
-                    do
-                        if link.hostname then
-                            local hostname = link.hostname:lower()
-                            if link.linkType == "DTD" then
-                                track.links[hostname] = { type = link.linkType }
-                            elseif link.linkType == "RF" then
-                                local snr = link.signal - link.noise
-                                if not track.links[hostname] then
-                                    track.links[hostname] = {
-                                        type = link.linkType,
-                                        snr = snr
-                                    }
-                                end
-                                if myhostname == hostname then
-                                    track.rev_snr = snr
-                                    track.avg_snr = (track.snr + snr) / 2
+                        track.links = {}
+                        track.rev_snr = nil
+                        for ip, link in pairs(info.link_info)
+                        do
+                            if link.hostname then
+                                local hostname = link.hostname:lower()
+                                if link.linkType == "DTD" then
+                                    track.links[hostname] = { type = link.linkType }
+                                elseif link.linkType == "RF" then
+                                    local snr = link.signal - link.noise
+                                    if not track.links[hostname] then
+                                        track.links[hostname] = {
+                                            type = link.linkType,
+                                            snr = snr
+                                        }
+                                    end
+                                    if myhostname == hostname then
+                                        track.rev_snr = snr
+                                        track.avg_snr = (track.snr + snr) / 2
+                                    end
                                 end
                             end
                         end
