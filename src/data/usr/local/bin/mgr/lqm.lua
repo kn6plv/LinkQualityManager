@@ -254,7 +254,7 @@ function lqm()
                                 local hostname = link.hostname:lower()
                                 if link.linkType == "DTD" then
                                     track.links[hostname] = { type = link.linkType }
-                                elseif link.linkType == "RF" then
+                                elseif link.linkType == "RF" and link.signal and link.noise then
                                     local snr = link.signal - link.noise
                                     if not track.links[hostname] then
                                         track.links[hostname] = {
