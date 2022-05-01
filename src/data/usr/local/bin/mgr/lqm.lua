@@ -32,20 +32,27 @@
 
 --]]
 
-local nixio = require("nixio")
-local uci = require("uci")
 local json = require("luci.jsonc")
-local sys = require("luci.sys")
 local ip = require("luci.ip")
+local info = require("aredn.info")
 
-local refresh_timeout = 60 * 60 -- refresh high cost data evey hour
-local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before banning
-local lastseen_timeout = 60 * 60 -- age out nodes we've not seen in an hour
+local refresh_timeout = 15 * 60 -- refresh high cost data every 15 minutes
+local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before blocking
+local lastseen_timeout = 5 * 60 -- age out nodes we've not seen 5 minutes
 
+local myhostname = (info.get_nvram("node") or "localnode"):lower()
+
+function should_block(track)
+    return track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user or track.blocks.dup
+end
+
+function should_nonpair_block(track)
+    return track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user
+end
 
 function update_block(track)
     if not track.pending then
-        if track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user then
+        if should_block(track) then
             if not track.blocked then
                 track.blocked = true
                 os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
@@ -159,16 +166,22 @@ function lqm()
                         mac = mac,
                         station = nil,
                         ip = nil,
+                        hostname = nil,
                         lat = nil,
                         lon = nil,
                         distance = nil,
                         blocks = {
                             dtd = false,
                             signal = false,
-                            distance = false
+                            distance = false,
+                            pair = false
                         },
                         blocked = false,
-                        pending = true
+                        pending = true,
+                        snr = 0,
+                        rev_snr = nil,
+                        avg_snr = 0,
+                        links = {}
                     }
                 end
                 local track = tracker[mac]
@@ -183,27 +196,19 @@ function lqm()
                     if dtd and dtd.Device:match("%.2$") and dtd["HW address"] ~= "00:00:00:00:00:00" then
                         macdtd = true
                     end
-                    track.hostname = (nixio.getnameinfo(track.ip) or ""):match("^(.*)%.local%.mesh$")
+                    local hostname = nixio.getnameinfo(track.ip)
+                    if hostname then
+                        track.hostname = hostname:lower():match("^(.*)%.local%.mesh$")
+                    end
                 end
                 if macdtd and not track.dtd then
                     track.blocks.dtd = true
                 elseif not macdtd and track.dtd then
                     track.blocks.dtd = false
                 end
-                if not track.dtd then
-                    -- When unblocked link becomes too low, block
-                    if not track.blocks.signal then
-                        if snr < config.low then
-                            track.blocks.signal = true
-                        end 
-                    -- when blocked link becomes (low+margin) again, unblock
-                    elseif track.blocks.signal then
-                        if snr >= config.low + config.margin then
-                            track.blocks.signal = false
-                        end 
-                    end
-                end
 
+                track.snr = snr
+                track.avg_snr = (snr + (track.rev_snr or snr)) / 2
                 track.lastseen = now
                 track.station = station
             end
@@ -212,6 +217,7 @@ function lqm()
         local distance = -1
         local coverage = -1
 
+        -- Update link tracking state
         for _, track in pairs(tracker)
         do
             -- Release pending nodes after the wait time
@@ -229,13 +235,37 @@ function lqm()
                 if not track.pending then
                     track.refresh = now + refresh_timeout
                 end
-                if not track.blocked and not track.lat and track.ip then
-                    local info = json.parse(sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json"))
-                    if info and tonumber(info.lat) and tonumber(info.lon) then
+                local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1"))
+                if info then
+                    track.distance = nil
+                    if tonumber(info.lat) and tonumber(info.lon) then
                         track.lat = tonumber(info.lat)
                         track.lon = tonumber(info.lon)
                         if lat and lon then
                             track.distance = calcDistance(lat, lon, track.lat, track.lon)
+                        end
+                    end
+                    track.links = {}
+                    track.rev_snr = nil
+                    for ip, link in pairs(info.link_info)
+                    do
+                        if link.hostname then
+                            local hostname = link.hostname:lower()
+                            if link.linkType == "DTD" then
+                                track.links[hostname] = { type = link.linkType }
+                            elseif link.linkType == "RF" then
+                                local snr = link.signal - link.noise
+                                if not track.links[hostname] then
+                                    track.links[hostname] = {
+                                        type = link.linkType,
+                                        snr = snr
+                                    }
+                                end
+                                if myhostname == hostname then
+                                    track.rev_snr = snr
+                                    track.avg_snr = (track.snr + snr) / 2
+                                end
+                            end
                         end
                     end
                 end
@@ -248,6 +278,22 @@ function lqm()
             else
                 track.routable = false
             end
+        end
+
+        -- Work out what to block and unblock
+        for _, track in pairs(tracker)
+        do
+            -- When unblocked link signal becomes too low, block
+            if not track.blocks.signal then
+                if track.snr < config.low or (track.rev_snr and track.rev_snr < config.low) then
+                    track.blocks.signal = true
+                end 
+            -- when blocked link becomes (low+margin) again, unblock
+            else
+                if track.snr >= config.low + config.margin and (track.rev_snr and track.rev_snr >= config.low + config.margin) then
+                    track.blocks.signal = false
+                end 
+            end
 
             -- Block any nodes which are too distant
             if not track.distance or (track.distance >= config.min_distance and track.distance <= config.max_distance) then
@@ -256,7 +302,7 @@ function lqm()
                 track.blocks.distance = true
             end
 
-            -- Block is user requested it
+            -- Block if user requested it
             track.blocks.user = false
             for val in string.gmatch(config.user_blocks, "([^,]+)")
             do
@@ -265,7 +311,58 @@ function lqm()
                     break
                 end
             end
+        end
 
+        -- Eliminate link pairs, where we might have links to multiple radios at the same site
+        -- Find them and select the one with the best SNR avg on both ends
+        for _, track in pairs(tracker)
+        do
+            if track.hostname and not should_nonpair_block(track) then
+                -- Get a list of radio pairs. These are radios we're associated with which are DTD'ed together
+                local tracklist = { track }
+                for _, track2 in pairs(tracker)
+                do
+                    if track ~= track2 and track2.hostname and not should_nonpair_block(track2) then
+                        local connection = track.links[track2.hostname]
+                        if connection and connection.type == "DTD" then
+                            tracklist[#tracklist + 1] = track2
+                        end
+                    end
+                end
+                if #tracklist == 1 then
+                    track.blocks.dup = false
+                else
+                    -- Find the link with the best average snr overall as well as unblocked
+                    local bestany = track
+                    local bestunblocked = nil
+                    for _, track2 in ipairs(tracklist)
+                    do
+                        if track2.avg_snr > bestany.avg_snr then
+                            bestany = track2
+                        end
+                        if not track2.blocks.dup and (not bestunblocked or (track2.avg_snr > bestunblocked.avg_snr)) then
+                            bestunblocked = track2
+                        end
+                    end
+                    -- A new winner if it's sufficiently better than the current
+                    if not bestunblocked or bestany.avg_snr >= bestunblocked.avg_snr + config.margin then
+                        bestunblocked = bestany
+                    end
+                    for _, track2 in ipairs(tracklist)
+                    do
+                        if track2 == bestunblocked then
+                            track2.blocks.dup = false
+                        else
+                            track2.blocks.dup = true
+                        end
+                    end
+                end
+            end
+        end
+
+        -- Update the block state and calculate the routable distance
+        for _, track in pairs(tracker)
+        do
             update_block(track)
 
              -- Find the most distant, unblocked, routable, node
