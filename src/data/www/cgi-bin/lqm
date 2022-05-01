@@ -141,7 +141,7 @@ html.print(string.format([[
         }
         const name = track => {
             if (track.hostname || track.ip) {
-                return `<a href="http://${track.hostname || track.ip}">${track.hostname || track.ip}</a>`;
+                return `<a href="http://${track.hostname || track.ip}:8080">${track.hostname || track.ip}</a>`;
             }
             return track.mac || "-";
         }
