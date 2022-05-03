@@ -396,39 +396,13 @@ function lqm()
             os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set distance auto")
         end
 
-        --[[if distance ~= last_distance then
-            last_distance = distance
-
-            cursor:set("wireless", radioname, "distance", distance)
-            cursor:commit("wireless")
-
-            -- Update the global _setup
-            local lines = {}
-            for line in io.lines("/etc/config.mesh/_setup")
-            do
-                if line:match("^wifi_distance = ") then
-                    lines[#lines + 1] = "wifi_distance = " .. distance
-                else
-                    lines[#lines + 1] = line
-                end
-            end
-            local f = io.open("/etc/config.mesh/_setup", "w")
-            if f then
-                for _, line in ipairs(lines)
-                do
-                    f:write(line .. "\n")
-                end
-                f:close()
-            end
-        end--]]
-
         -- Save this for the UI
         f = io.open("/tmp/lqm.info", "w")
         if f then
             f:write(json.stringify({
                 trackers = tracker,
                 distance = distance,
-                coverate = coverage
+                coverage = coverage
             }, true))
             f:close()
         end
