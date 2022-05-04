@@ -174,13 +174,14 @@ html.print(string.format([[
             for (let mac in data.info.trackers) {
                 const track = data.info.trackers[mac];
                 let txspeed = "-";
-                let txsuccess = "-";
-                if (!track.blocked && track.station.tx_packets > 0) {
-                    txsuccess = Math.max(0, (track.station.tx_packets - track.station.tx_retries - track.station.tx_fail) / track.station.tx_packets);
-                    txspeed = (track.station.tx_rate * wifi_scale * txsuccess).toFixed(2) + " Mb/s";
-                    txsuccess = (100 - Math.round(txsuccess * 100)) + "%%";
+                let txerrors = "-";
+                if (!track.blocked) {
+                    txspeed = (track.station.tx_rate * wifi_scale).toFixed(2) + " Mb/s";
                 }
-                links += `<div><span class="m">${name(track)}</span><span class="s">${track.snr}${"rev_snr" in track ? "/" + track.rev_snr : ""}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txsuccess}</span><span class="p">${txspeed}</span><span class="x"><input type="checkbox" ${user_blocks.indexOf(track.mac) !== -1 ? "checked" : ""}></span><span class="b">${status(track)}</span></div>`;
+                if (typeof track.tx_errors === "number") {
+                    txerrors = track.tx_errors + "%%";
+                }
+                links += `<div><span class="m">${name(track)}</span><span class="s">${track.snr}${"rev_snr" in track ? "/" + track.rev_snr : ""}</span><span class="p">${"distance" in track ? (meters_to_miles * track.distance).toFixed(2) + " miles" : "-"}</span><span class="s">${txerrors}</span><span class="p">${txspeed}</span><span class="x"><input type="checkbox" ${user_blocks.indexOf(track.mac) !== -1 ? "checked" : ""}></span><span class="b">${status(track)}</span></div>`;
             }
             document.getElementById("links").innerHTML = links;
             const c = document.querySelectorAll(".x input");
