@@ -309,7 +309,7 @@ function lqm()
                 end 
             -- when blocked link becomes (low+margin) again, unblock
             else
-                if track.snr >= config.low + config.margin and (track.rev_snr and track.rev_snr >= config.low + config.margin) then
+                if track.snr >= config.low + config.margin and (not track.rev_snr or track.rev_snr >= config.low + config.margin) then
                     track.blocks.signal = false
                 end 
             end
