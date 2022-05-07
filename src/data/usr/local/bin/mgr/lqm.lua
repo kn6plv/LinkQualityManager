@@ -208,7 +208,12 @@ function lqm()
                 if track.station then
                     local tx_packets = station.tx_packets - track.station.tx_packets
                     local tx_errors = (station.tx_fail + station.tx_retries) - (track.station.tx_fail + track.station.tx_retries)
-                    track.tx_errors = tx_packets + tx_errors <= 0 and nil or math.min(100, math.max(0, math.floor(100 * tx_errors / (tx_packets + tx_errors))))
+                    -- Make sure we have some data to estimate quality
+                    if tx_packets + tx_errors <= 10 then
+                        track.tx_quality = nil
+                    else
+                        track.tx_quality = math.min(100, math.max(0, math.floor(100 * tx_packets / (tx_packets + tx_errors))))
+                    end
                 end
                 track.station = station
                 track.lastseen = now
