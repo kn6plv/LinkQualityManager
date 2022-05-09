@@ -278,6 +278,7 @@ function lqm()
                         end
                     else
                         -- Clear these if we cannot talk to the other end, so we dont use stale values
+                        track.links = {}
                         track.rev_snr = nil
                     end
                 end
