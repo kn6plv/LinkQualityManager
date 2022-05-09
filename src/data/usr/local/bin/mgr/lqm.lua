@@ -244,7 +244,6 @@ function lqm()
                 if track.ip then
                     local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1"))
                     if info then
-                        track.distance = nil
                         if tonumber(info.lat) and tonumber(info.lon) then
                             track.lat = tonumber(info.lat)
                             track.lon = tonumber(info.lon)
@@ -279,7 +278,6 @@ function lqm()
                         end
                     else
                         -- Clear these if we cannot talk to the other end, so we dont use stale values
-                        track.distance = nil
                         track.rev_snr = nil
                     end
                 end
