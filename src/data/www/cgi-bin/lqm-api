@@ -71,6 +71,12 @@ if params then
 	if tonumber(params.max_distance) then
 		config.max_distance = tonumber(params.max_distance)
 	end
+	if tonumber(params.min_quality) then
+		config.min_quality = tonumber(params.min_quality)
+	end
+	if tonumber(params.margin_quality) then
+		config.margin_quality = tonumber(params.margin_quality)
+	end
 	if params.user_blocks then
 		config.user_blocks = params.user_blocks
 	end
