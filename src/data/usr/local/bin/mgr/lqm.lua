@@ -37,25 +37,39 @@ local ip = require("luci.ip")
 local info = require("aredn.info")
 
 local refresh_timeout = 15 * 60 -- refresh high cost data every 15 minutes
-local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before blocking
+local pending_timeout = 5 * 60 -- pending node wait 5 minutes before they are included
 local lastseen_timeout = 60 * 60 -- age out nodes we've not seen for 1 hour
-local quality_timeout = 5 * 50 -- wait 5 minutes after restoring connection before allowing it to be blocked again
 local snr_run_avg = 0.8 -- snr running average
-local min_tx_packets = 100 -- minimum number of tx packets before we can safely calculate the link quality
-local quality_injection_max = 1 -- number of packets to inject into poor links to update quality
+local quality_min_packets = 100 -- minimum number of tx packets before we can safely calculate the link quality
+local quality_injection_max = 10 -- number of packets to inject into poor links to update quality
+local quality_run_avg = 0.8 -- quality running average
 
 local myhostname = (info.get_nvram("node") or "localnode"):lower()
+local now = 0
+
+function get_config()
+    local f = io.open("/etc/local/lqm.conf")
+    local config = json.parse(f:read("*a"))
+    f:close()
+    return config
+end
 
 function should_block(track)
-    if track.pending then
-        return track.blocks.dtd or track.blocks.distance or track.blocks.user
-    else
+    if now > track.pending then
         return track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user or track.blocks.dup or track.blocks.quality
+    else
+        return track.blocks.dtd or track.blocks.distance or track.blocks.user
     end
 end
 
 function should_nonpair_block(track)
     return track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user or track.blocks.quality
+end
+
+function only_quality_block(track)
+    return track.blocked and track.blocks.quality and not (
+        track.blocks.dtd or track.blocks.signal or track.blocks.distance or track.blocks.user or track.blocks.dup
+    )
 end
 
 function update_block(track)
@@ -64,13 +78,16 @@ function update_block(track)
             track.blocked = true
             os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
             os.execute("/usr/sbin/iptables -I input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+            return "blocked"
         end
     else
         if track.blocked then
             track.blocked = false
             os.execute("/usr/sbin/iptables -D input_lqm -p udp --destination-port 698 -m mac --mac-source " .. track.mac .. " -j DROP 2> /dev/null")
+            return "unblocked"
         end
     end
+    return "unchanged"
 end
 
 function calcDistance(lat1, lon1, lat2, lon2)
@@ -81,7 +98,9 @@ function calcDistance(lat1, lon1, lat2, lon2)
 end
 
 -- Clear old data
-io.open("/tmp/lqm.info", "w"):close()
+local f = io.open("/tmp/lqm.info", "w")
+f:write("{}")
+f:close()
 
 local cursor = uci.cursor()
 
@@ -121,9 +140,9 @@ function lqm()
     local tracker = {}
     while true
     do
-        local f = io.open("/etc/local/lqm.conf")
-        local config = json.parse(f:read("*a"))
-        f:close()
+        now = nixio.sysinfo().uptime
+
+        local config = get_config()
 
         local lat = tonumber(cursor:get("aredn", "@location[0]", "lat"))
         local lon = tonumber(cursor:get("aredn", "@location[0]", "lon"))
@@ -164,15 +183,13 @@ function lqm()
             end
         end
 
-        local now = nixio.sysinfo().uptime
-
         for mac, station in pairs(stations)
         do
             if station.signal ~= 0 then
                 local snr = station.signal - station.noise
                 if not tracker[mac] then
                     tracker[mac] = {
-                        firstseen = now,
+                        pending = now + pending_timeout,
                         refresh = 0,
                         mac = mac,
                         station = nil,
@@ -189,11 +206,13 @@ function lqm()
                             quality = false
                         },
                         blocked = false,
-                        pending = true,
                         snr = snr,
                         rev_snr = nil,
                         avg_snr = 0,
-                        links = {}
+                        links = {},
+                        tx_rate = 0,
+                        last_tx = nil,
+                        last_tx_total = nil
                     }
                 end
                 local track = tracker[mac]
@@ -213,16 +232,30 @@ function lqm()
                     end
                 end
 
+                -- Running average SNR
                 track.snr = math.ceil(snr_run_avg * track.snr + (1 - snr_run_avg) * snr)
 
-                -- Make sure we have some data to estimate quality
-                if station.tx_packets + station.tx_fail + station.tx_retries <= min_tx_packets then
+                -- Running average estimate of link quality
+                local tx = station.tx_packets
+                local tx_total = station.tx_packets + station.tx_fail + station.tx_retries
+                if not track.last_tx then
+                    track.last_tx = tx
+                    track.last_tx_total = tx_total
                     track.tx_quality = nil
-                else
-                    track.tx_quality = math.floor(100 * station.tx_packets / (station.tx_packets + station.tx_fail + station.tx_retries))
+                elseif tx_total >= track.last_tx_total + quality_min_packets then
+                    local tx_quality = 100 * (tx - track.last_tx) / (tx_total - track.last_tx_total)
+                    track.last_tx = tx
+                    track.last_tx_total = tx_total
+                    track.last_quality = tx_quality
+                    if track.tx_quality then
+                        track.tx_quality = math.ceil(quality_run_avg * track.tx_quality + (1 - quality_run_avg) * tx_quality)
+                    else
+                        track.tx_quality = math.ceil(tx_quality)
+                    end
                 end
 
-                track.station = station
+                track.tx_rate = station.tx_rate
+
                 track.lastseen = now
             end
         end
@@ -234,39 +267,67 @@ function lqm()
         -- Update link tracking state
         for _, track in pairs(tracker)
         do
-            -- Release pending nodes after the wait time
-            if now > track.firstseen + wait_timeout then
-                track.pending = false
-            end
-
-            -- Clear snr when we've not seen the node
+            -- Clear snr when we've not seen the node this time (disconnected)
             if track.lastseen < now then
                 track.snr = 0
                 track.rev_snr = nil
             end
 
-            -- Only refesh certain attributes periodically
-            if track.refresh < now then
-                if not track.pending then
-                    track.refresh = now + refresh_timeout
-                end
-                if track.ip then
-                    local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1"))
-                    if info then
-                        if tonumber(info.lat) and tonumber(info.lon) then
-                            track.lat = tonumber(info.lat)
-                            track.lon = tonumber(info.lon)
-                            if lat and lon then
-                                track.distance = calcDistance(lat, lon, track.lat, track.lon)
+            -- Only refresh remote attributes periodically
+            if track.ip and (now > track.refresh or track.pending > now) then
+                track.refresh = now + refresh_timeout
+                local info = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/sysinfo.json?link_info=1&lqm=1"))
+                if info then
+                    if tonumber(info.lat) and tonumber(info.lon) then
+                        track.lat = tonumber(info.lat)
+                        track.lon = tonumber(info.lon)
+                        if lat and lon then
+                            track.distance = calcDistance(lat, lon, track.lat, track.lon)
+                        end
+                    end
+                    if not info.lqm then
+                        -- Non-integrated API
+                        info.lqm = json.parse(luci.sys.httpget("http://" .. track.ip .. ":8080/cgi-bin/lqm-api"))
+                        if info.lqm then
+                            info.lqm.enabled = true
+                        end
+                    end
+                    local old_rev_snr = track.rev_snr
+                    track.links = {}
+                    -- If we find no lqm information for ourself, then the remote node has no link
+                    track.rev_snr = 0
+                    if info.lqm and info.lqm.enabled then
+                        for _, rtrack in pairs(info.lqm.info.trackers)
+                        do
+                            if rtrack.hostname then
+                                local hostname = rtrack.hostname:lower():gsub("^dtdlink%.","")
+                                track.links[hostname] = {
+                                    type = "RF",
+                                    snr = rtrack.snr
+                                }
+                                if myhostname == hostname then
+                                    if not old_rev_snr then
+                                        track.rev_snr = rtrack.snr
+                                    else
+                                        track.rev_snr = math.ceil(snr_run_avg * old_rev_snr + (1 - snr_run_avg) * rtrack.snr)
+                                    end
+                                end
                             end
                         end
-                        local old_rev_snr = track.rev_snr
-                        track.links = {}
+                        for ip, link in pairs(info.link_info)
+                        do
+                            if link.hostname and link.linkType == "DTD" then
+                                track.links[link.hostname:lower()] = { type = "DTD" }
+                            end
+                        end
+                    else
+                        -- If there's no LQM information we fallback on using link information.
+                        -- Note: We cannot assume a missing link means no wifi connection
                         track.rev_snr = null
                         for ip, link in pairs(info.link_info)
                         do
                             if link.hostname then
-                                local hostname = link.hostname:lower()
+                                local hostname = link.hostname:lower():gsub("^dtdlink%.","")
                                 if link.linkType == "DTD" then
                                     track.links[hostname] = { type = link.linkType }
                                 elseif link.linkType == "RF" and link.signal and link.noise then
@@ -278,7 +339,7 @@ function lqm()
                                         }
                                     end
                                     if myhostname == hostname then
-                                        if not old_rev_snr or old_rev_snr == 0 then
+                                        if not old_rev_snr then
                                             track.rev_snr = snr
                                         else
                                             track.rev_snr = math.ceil(snr_run_avg * old_rev_snr + (1 - snr_run_avg) * snr)
@@ -287,11 +348,11 @@ function lqm()
                                 end
                             end
                         end
-                    else
-                        -- Clear these if we cannot talk to the other end, so we dont use stale values
-                        track.links = {}
-                        track.rev_snr = nil
                     end
+                else
+                    -- Clear these if we cannot talk to the other end, so we dont use stale values
+                    track.links = {}
+                    track.rev_snr = nil
                 end
             end
 
@@ -308,8 +369,10 @@ function lqm()
 
             -- Inject traffic into links with poor quality
             -- We do this so we can keep measuring the current link quality otherwise, once it becomes
-            -- bad, it wont be used and we can never tell if it becomes good again
-            if track.ip and (not track.tx_quality or track.blocks.quality) then
+            -- bad, it wont be used and we can never tell if it becomes good again. Beware injecting too
+            -- much traffic because, on very poor links, this can generate multiple retries per packet, flooding
+            -- the wifi channel
+            if track.ip and only_quality_block(track) then
                 for _ = 1,quality_injection_max
                 do
                     sigsock:sendto("", track.ip, 8080)
@@ -409,11 +472,14 @@ function lqm()
         -- Update the block state and calculate the routable distance
         for _, track in pairs(tracker)
         do
-            update_block(track)
+            if update_block(track) == "unblocked" then
+                -- If the link becomes unblocked, return it to pending state
+                track.pending = now + pending_timeout
+            end
 
              -- Find the most distant, unblocked, routable, node
             if not track.blocked and track.distance then
-                if not track.pending and track.routable then
+                if now > track.pending and track.routable then
                     if track.distance > distance then 
                         distance = track.distance
                     end
@@ -441,7 +507,7 @@ function lqm()
             coverage = math.floor((distance * 2 * 0.0033) / 3) -- airtime
             os.execute("iw " .. phy .. " set coverage " .. coverage)
         elseif alt_distance > 1 then
-            coverage = math.floor((alt_distance * 2 * 0.0033) / 3) -- airtime
+            coverage = math.floor((alt_distance * 2 * 0.0033) / 3)
             os.execute("iw " .. phy .. " set coverage " .. coverage)
         else
             os.execute("iw " .. phy .. " set distance auto")
@@ -451,6 +517,7 @@ function lqm()
         f = io.open("/tmp/lqm.info", "w")
         if f then
             f:write(json.stringify({
+                now = now,
                 trackers = tracker,
                 distance = distance,
                 coverage = coverage

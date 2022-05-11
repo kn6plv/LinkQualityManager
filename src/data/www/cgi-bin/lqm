@@ -141,7 +141,7 @@ html.print(string.format([[
                 }
                 return "blocked";
             }
-            if (track.pending) {
+            if (track.pending > d.info.now) {
                 return "pending";
             }
             if (track.routable) {
@@ -186,7 +186,7 @@ html.print(string.format([[
                 let txspeed = "-";
                 let txquality = "-";
                 if (!track.blocked) {
-                    txspeed = (track.station.tx_rate * wifi_scale).toFixed(2) + " Mb/s";
+                    txspeed = (track.tx_rate * wifi_scale).toFixed(2) + " Mb/s";
                 }
                 if (typeof track.tx_quality === "number") {
                     txquality = track.tx_quality + "%%";
