@@ -41,8 +41,8 @@ local wait_timeout = 5 * 60 -- wait 5 minutes after node is first seen before bl
 local lastseen_timeout = 60 * 60 -- age out nodes we've not seen for 1 hour
 local quality_timeout = 5 * 50 -- wait 5 minutes after restoring connection before allowing it to be blocked again
 local snr_run_avg = 0.8 -- snr running average
-local min_tx_packets = 1000 -- minimum number of tx packets before we can safely calculate the link quality
-local quality_injection_max = 100 -- number of packets to inject into poor links to update quality
+local min_tx_packets = 100 -- minimum number of tx packets before we can safely calculate the link quality
+local quality_injection_max = 1 -- number of packets to inject into poor links to update quality
 
 local myhostname = (info.get_nvram("node") or "localnode"):lower()
 
@@ -94,11 +94,13 @@ do
         break
     end
 end
+local phy = "phy" .. radioname:match("radio(%d+)")
+local wlan = get_ifname("wifi")
 
 function lqm()
 
     -- Let things startup for a while before we begin
-    wait_for_ticks(math.max(1, 120 - nixio.sysinfo().uptime))
+    wait_for_ticks(math.max(1, 30 - nixio.sysinfo().uptime))
 
     -- Create filters (cannot create during install as they disappear on reboot)
     os.execute("/usr/sbin/iptables -F input_lqm 2> /dev/null")
@@ -110,11 +112,13 @@ function lqm()
     -- Create socket we use to inject traffic into degraded links to measure quality
     -- This is setup so it ignores routing and will always send to the correct wifi station
     local sigsock = nixio.socket("inet", "dgram")
-    sigsock:setopt("socket", "bindtodevice", get_ifname("wifi"))
+    sigsock:setopt("socket", "bindtodevice", wlan)
     sigsock:setopt("socket", "dontroute", 1)
 
+    -- We dont know any distances yet
+    os.execute("iw " .. phy .. " set distance auto")
+
     local tracker = {}
-    local last_distance = -1
     while true
     do
         local f = io.open("/etc/local/lqm.conf")
@@ -133,7 +137,6 @@ function lqm()
 
         local kv = {
             ["signal avg:"] = "signal",
-            ["last ack signal:"] = "ack_signal",
             ["tx packets:"] = "tx_packets",
             ["tx retries:"] = "tx_retries",
             ["tx failed:"] = "tx_fail",
@@ -141,7 +144,7 @@ function lqm()
         }
         local stations = {}
         local station = {}
-        for line in io.popen("iw " .. get_ifname("wifi") .. " station dump"):lines()
+        for line in io.popen("iw " .. wlan .. " station dump"):lines()
         do
             local mac = line:match("^Station ([0-9a-f:]+) ")
             if mac then
@@ -161,7 +164,7 @@ function lqm()
             end
         end
 
-        local now = os.time()
+        local now = nixio.sysinfo().uptime
 
         for mac, station in pairs(stations)
         do
@@ -211,13 +214,6 @@ function lqm()
                 end
 
                 track.snr = math.ceil(snr_run_avg * track.snr + (1 - snr_run_avg) * snr)
-                if station.ack_signal then
-                    if not track.rev_snr then
-                        track.rev_snr = station.ack_signal
-                    else
-                        track.rev_snr = math.ceil(snr_run_avg * track.rev_snr + (1 - snr_run_avg) * station.ack_signal)
-                    end
-                end
 
                 -- Make sure we have some data to estimate quality
                 if station.tx_packets + station.tx_fail + station.tx_retries <= min_tx_packets then
@@ -232,6 +228,7 @@ function lqm()
         end
 
         local distance = -1
+        local alt_distance = -1
         local coverage = -1
 
         -- Update link tracking state
@@ -265,7 +262,7 @@ function lqm()
                         end
                         local old_rev_snr = track.rev_snr
                         track.links = {}
-                        track.rev_snr = nil
+                        track.rev_snr = null
                         for ip, link in pairs(info.link_info)
                         do
                             if link.hostname then
@@ -281,7 +278,7 @@ function lqm()
                                         }
                                     end
                                     if myhostname == hostname then
-                                        if not old_rev_snr then
+                                        if not old_rev_snr or old_rev_snr == 0 then
                                             track.rev_snr = snr
                                         else
                                             track.rev_snr = math.ceil(snr_run_avg * old_rev_snr + (1 - snr_run_avg) * snr)
@@ -415,8 +412,16 @@ function lqm()
             update_block(track)
 
              -- Find the most distant, unblocked, routable, node
-            if not track.pending and not track.blocked and track.routable and track.distance and track.distance > distance then
-                distance = track.distance
+            if not track.blocked and track.distance then
+                if not track.pending and track.routable then
+                    if track.distance > distance then 
+                        distance = track.distance
+                    end
+                else
+                    if track.distance > alt_distance then
+                        alt_distance = track.distance
+                    end
+                end
             end
 
             -- Remove any trackers which are too old
@@ -429,13 +434,17 @@ function lqm()
         end
 
         distance = distance + 1
+        alt_distance = alt_distance + 1
 
         -- Update the wifi distance
         if distance > 0 then
             coverage = math.floor((distance * 2 * 0.0033) / 3) -- airtime
-            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set coverage " .. coverage)
+            os.execute("iw " .. phy .. " set coverage " .. coverage)
+        elseif alt_distance > 1 then
+            coverage = math.floor((alt_distance * 2 * 0.0033) / 3) -- airtime
+            os.execute("iw " .. phy .. " set coverage " .. coverage)
         else
-            os.execute("iw phy" .. radioname:match("radio(%d+)") .. " set distance auto")
+            os.execute("iw " .. phy .. " set distance auto")
         end
 
         -- Save this for the UI
