@@ -112,7 +112,7 @@ function lqm()
     local sigsock = nixio.socket("inet", "dgram")
     sigsock:setopt("socket", "bindtodevice", get_ifname("wifi"))
     sigsock:setopt("socket", "dontroute", 1)
-    
+
     local tracker = {}
     local last_distance = -1
     while true
