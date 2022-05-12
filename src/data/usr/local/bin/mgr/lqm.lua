@@ -247,11 +247,7 @@ function lqm()
                     track.last_tx = tx
                     track.last_tx_total = tx_total
                     track.last_quality = tx_quality
-                    if track.tx_quality then
-                        track.tx_quality = math.ceil(quality_run_avg * track.tx_quality + (1 - quality_run_avg) * tx_quality)
-                    else
-                        track.tx_quality = math.ceil(tx_quality)
-                    end
+                    track.tx_quality = math.ceil(quality_run_avg * track.tx_quality + (1 - quality_run_avg) * tx_quality)
                 end
 
                 track.tx_rate = station.tx_rate
