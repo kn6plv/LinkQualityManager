@@ -241,7 +241,7 @@ function lqm()
                 if not track.last_tx then
                     track.last_tx = tx
                     track.last_tx_total = tx_total
-                    track.tx_quality = nil
+                    track.tx_quality = 100
                 elseif tx_total >= track.last_tx_total + quality_min_packets then
                     local tx_quality = 100 * (tx - track.last_tx) / (tx_total - track.last_tx_total)
                     track.last_tx = tx
