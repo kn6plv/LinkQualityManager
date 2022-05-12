@@ -306,7 +306,7 @@ function lqm()
                                     snr = rtrack.snr
                                 }
                                 if myhostname == hostname then
-                                    if not old_rev_snr then
+                                    if not old_rev_snr or not rtrack.snr then
                                         track.rev_snr = rtrack.snr
                                     else
                                         track.rev_snr = math.ceil(snr_run_avg * old_rev_snr + (1 - snr_run_avg) * rtrack.snr)
