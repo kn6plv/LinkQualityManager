@@ -290,8 +290,8 @@ function lqm()
                     end
                     local old_rev_snr = track.rev_snr
                     track.links = {}
-                    -- If we find no lqm information for ourself, then the remote node has no link
-                    track.rev_snr = 0
+                    -- Note: We cannot assume a missing link means no wifi connection
+                    track.rev_snr = null
                     if info.lqm and info.lqm.enabled then
                         for _, rtrack in pairs(info.lqm.info.trackers)
                         do
@@ -318,8 +318,6 @@ function lqm()
                         end
                     else
                         -- If there's no LQM information we fallback on using link information.
-                        -- Note: We cannot assume a missing link means no wifi connection
-                        track.rev_snr = null
                         for ip, link in pairs(info.link_info)
                         do
                             if link.hostname then
