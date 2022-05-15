@@ -130,12 +130,6 @@ function lqm()
     os.execute("/usr/sbin/iptables -D INPUT -j input_lqm -m comment --comment 'block low quality links' 2> /dev/null")
     os.execute("/usr/sbin/iptables -I INPUT -j input_lqm -m comment --comment 'block low quality links' 2> /dev/null")
 
-    -- Create socket we use to inject traffic into degraded links to measure quality
-    -- This is setup so it ignores routing and will always send to the correct wifi station
-    local sigsock = nixio.socket("inet", "dgram")
-    sigsock:setopt("socket", "bindtodevice", wlan)
-    sigsock:setopt("socket", "dontroute", 1)
-
     -- We dont know any distances yet
     os.execute("iw " .. phy .. " set distance auto")
 
@@ -375,10 +369,16 @@ function lqm()
             -- much traffic because, on very poor links, this can generate multiple retries per packet, flooding
             -- the wifi channel
             if track.ip and only_quality_block(track) then
+                -- Create socket we use to inject traffic into degraded links
+                -- This is setup so it ignores routing and will always send to the correct wifi station
+                local sigsock = nixio.socket("inet", "dgram")
+                sigsock:setopt("socket", "bindtodevice", wlan)
+                sigsock:setopt("socket", "dontroute", 1)
                 for _ = 1,quality_injection_max
                 do
                     sigsock:sendto("", track.ip, 8080)
                 end
+                sigsock:close()
             end
         end
 
