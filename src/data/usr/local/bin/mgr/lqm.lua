@@ -43,6 +43,8 @@ local snr_run_avg = 0.8 -- snr running average
 local quality_min_packets = 100 -- minimum number of tx packets before we can safely calculate the link quality
 local quality_injection_max = 10 -- number of packets to inject into poor links to update quality
 local quality_run_avg = 0.8 -- quality running average
+local ping_timeout = 1.0 -- timeout before ping gives a qualtiy penalty
+local ping_penalty_factor = 0.25 -- decrease quality by this penalty when ping fails
 
 local myhostname = (info.get_nvram("node") or "localnode"):lower()
 local now = 0
@@ -360,6 +362,11 @@ function lqm()
                 track.routable = true
             else
                 track.routable = false
+            end
+
+            -- Ping routable addresses and penalize quality for excessively slow links
+            if track.routable and not track.blocked and os.execute("/bin/ping -c 1 -W " .. ping_timeout .. " " .. track.ip .. " > /dev/null") ~= 0 then
+                track.tx_quality = math.max(0, math.ceil(track.tx_quality - ping_penalty_factor * (100 - config.min_quality)))
             end
 
             -- Inject traffic into links with poor quality
