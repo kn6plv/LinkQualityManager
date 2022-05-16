@@ -44,7 +44,6 @@ local quality_min_packets = 100 -- minimum number of tx packets before we can sa
 local quality_injection_max = 10 -- number of packets to inject into poor links to update quality
 local quality_run_avg = 0.8 -- quality running average
 local ping_timeout = 1.0 -- timeout before ping gives a qualtiy penalty
-local ping_penalty_factor = 0.25 -- decrease quality by this penalty when ping fails
 
 local myhostname = (info.get_nvram("node") or "localnode"):lower()
 local now = 0
@@ -358,8 +357,8 @@ function lqm()
                 track.routable = false
             end
 
-            -- Ping routable addresses and penalize quality for excessively slow links
-            if track.routable and not track.blocked then
+            -- Ping addresses and penalize quality for excessively slow links
+            if track.ip and (not track.blocked or only_quality_block(track)) then
                 local sigsock = nixio.socket("inet", "dgram")
                 sigsock:setopt("socket", "bindtodevice", wlan)
                 sigsock:setopt("socket", "dontroute", 1)
@@ -369,7 +368,7 @@ function lqm()
                 -- There's no actual UDP server at the other end so recv will either timeout and return 'false' if the link is slow,
                 -- or will error and return 'nil' if there is a node and it send back an ICMP error quickly (which for our purposes is a positive)
                 if sigsock:recv(0) == false then
-                    track.tx_quality = math.max(0, math.ceil(track.tx_quality - ping_penalty_factor * (100 - config.min_quality)))
+                    track.tx_quality = math.max(0, math.ceil(track.tx_quality - config.ping_penalty))
                 end
                 sigsock:close()
             end

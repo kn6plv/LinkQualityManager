@@ -102,6 +102,7 @@ html.print(string.format([[
     <div id="ctrl">
         <span>Quality Minimum <input id="min_quality" type="number" min="0" max="100"> %%</span>
         <span>Margin <input id="margin_quality" type="number" min="0" max="100"> %%</span>
+        <span>Ping Penalty <input id="ping_penalty" type="number" min="0" max="100"> %%</span>
     </div>
     <script>
         const meters_to_miles = 0.000621371;
@@ -113,12 +114,14 @@ html.print(string.format([[
         const max_distance = document.getElementById("max_distance");
         const min_quality = document.getElementById("min_quality");
         const margin_quality = document.getElementById("margin_quality");
+        const ping_penalty = document.getElementById("ping_penalty");
         margin.value = d.config.margin;
         low.value = d.config.low;
         min_distance.value = (d.config.min_distance * meters_to_miles).toFixed(2);
         max_distance.value = (d.config.max_distance * meters_to_miles).toFixed(2);
         min_quality.value = d.config.min_quality;
         margin_quality.value = d.config.margin_quality;
+        ping_penalty.value = d.config.ping_penalty;
         const status = track => {
             if (track.blocked) {
                 if (track.blocks.user) {
@@ -174,7 +177,7 @@ html.print(string.format([[
                 headers: {
                     "Content-Type": "application/x-www-form-urlencoded"
                 },
-                body: `margin=${Math.max(0, margin.value)}&low=${Math.max(0, low.value)}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${user_blocks.join(",")}&min_quality=${Math.max(0, min_quality.value)}&margin_quality=${Math.max(0, margin_quality.value)}`
+                body: `margin=${Math.max(0, margin.value)}&low=${Math.max(0, low.value)}&min_distance=${Math.round(min_distance.value / meters_to_miles)}&max_distance=${Math.round(max_distance.value / meters_to_miles)}&user_blocks=${user_blocks.join(",")}&min_quality=${Math.max(0, min_quality.value)}&margin_quality=${Math.max(0, margin_quality.value)}&ping_penalty=${Math.max(0, ping_penalty.value)}`
             });
         }
         const update = data => {
@@ -206,6 +209,7 @@ html.print(string.format([[
         max_distance.addEventListener("change", onChange);
         min_quality.addEventListener("change", onChange);
         margin_quality.addEventListener("change", onChange);
+        ping_penalty.addEventListener("change", onChange);
         const fetchAndUpdate = () => {
             fetch("/cgi-bin/lqm-api").then(r => r.json()).then(data => {
                 update(data);

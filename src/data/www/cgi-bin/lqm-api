@@ -77,6 +77,9 @@ if params then
 	if tonumber(params.margin_quality) then
 		config.margin_quality = tonumber(params.margin_quality)
 	end
+	if tonumber(params.ping_penalty) then
+		config.ping_penalty = tonumber(params.ping_penalty)
+	end
 	if params.user_blocks then
 		config.user_blocks = params.user_blocks
 	end
