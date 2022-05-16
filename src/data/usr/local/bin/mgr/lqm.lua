@@ -404,6 +404,11 @@ function lqm()
             else
                 if track.snr >= config.low + config.margin and (not track.rev_snr or track.rev_snr >= config.low + config.margin) then
                     track.blocks.signal = false
+                    -- When signal is good enough to unblock a link but the quality is low, artificially bump
+                    -- it up to give the link chance to recover
+                    if track.blocks.quality then
+                        track.tx_quality = config.min_quality + config.margin_quality
+                    end
                 end 
             end
 
